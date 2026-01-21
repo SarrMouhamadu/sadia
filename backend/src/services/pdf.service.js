@@ -586,7 +586,7 @@ class PDFService {
 
     _formatMoney(amount) {
         const num = parseFloat(amount || 0);
-        return `${num.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD`;
+        return `${num.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} FCFA`;
     }
 
     _formatDate(date) {

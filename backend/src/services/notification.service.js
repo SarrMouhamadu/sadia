@@ -101,7 +101,7 @@ class NotificationService {
             await Notification.create({
                 type: 'PAYMENT_RECEIVED',
                 title: 'Paiement reçu',
-                message: `Paiement de ${payment.montant} MAD reçu du client "${client.nom}"`,
+                message: `Paiement de ${payment.montant} FCFA reçu du client "${client.nom}"`,
                 data: {
                     payment_id: payment.id,
                     client_id: client.id,
