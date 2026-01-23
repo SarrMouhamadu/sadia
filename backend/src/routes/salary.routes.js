@@ -405,6 +405,33 @@ router.patch('/:id/pay', authMiddleware, staffOnly, paySalaryValidator, validate
 
 /**
  * @swagger
+ * /api/salaries/{id}/cancel-payment:
+ *   patch:
+ *     summary: Cancel salary payment
+ *     tags: [Salaries]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Payment cancelled
+ *       400:
+ *         description: Not a paid salary
+ *       403:
+ *         description: Admin only
+ *       404:
+ *         description: Salary not found
+ */
+router.patch('/:id/cancel-payment', authMiddleware, adminOnly, salaryIdValidator, validate, salaryController.cancelPayment);
+
+/**
+ * @swagger
  * /api/salaries/{id}/bulletin:
  *   get:
  *     summary: Generate and download salary bulletin PDF

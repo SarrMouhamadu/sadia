@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Download, Filter, Calendar, TrendingUp, Loader2 } from 'lucide-react';
+import { DollarSign, Download, Filter, Calendar, TrendingUp, Loader2, Plus, XCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -32,6 +32,8 @@ export function SalaryManagement({ userRole }: SalaryManagementProps) {
   const [paymentMode, setPaymentMode] = useState<'ESPECES' | 'VIREMENT' | 'CHEQUE'>('VIREMENT');
   const [paymentReference, setPaymentReference] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [generatingMonth, setGeneratingMonth] = useState(false);
+  const [cancellingPayment, setCancellingPayment] = useState<string | null>(null);
 
   const canManage = userRole === 'ADMIN' || userRole === 'ASSISTANT';
 
@@ -99,6 +101,41 @@ export function SalaryManagement({ userRole }: SalaryManagementProps) {
     } catch (err: any) {
       console.error('Error downloading bulletin:', err);
       alert(err.response?.data?.message || 'Erreur lors du téléchargement');
+    }
+  };
+
+  const handleGenerateMonth = async () => {
+    if (!window.confirm(`Voulez-vous générer les salaires pour ${monthNames[selectedMonth - 1]} ${selectedYear} ?`)) {
+      return;
+    }
+
+    try {
+      setGeneratingMonth(true);
+      const result = await salaryService.generateMonthSalaries(selectedMonth, selectedYear);
+      alert(`${result.created} salaires générés, ${result.skipped} ignorés.`);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error generating month salaries:', err);
+      alert(err.response?.data?.message || 'Erreur lors de la génération');
+    } finally {
+      setGeneratingMonth(false);
+    }
+  };
+
+  const handleCancelPayment = async (salary: Salary) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir annuler ce paiement ? Le statut reviendra à "En attente".')) {
+      return;
+    }
+
+    try {
+      setCancellingPayment(salary.id);
+      await salaryService.cancelPayment(salary.id);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error cancelling payment:', err);
+      alert(err.response?.data?.message || 'Erreur lors de l\'annulation');
+    } finally {
+      setCancellingPayment(null);
     }
   };
 
@@ -195,6 +232,16 @@ export function SalaryManagement({ userRole }: SalaryManagementProps) {
           <p className="text-gray-600">Suivez et gérez les paiements de votre équipe</p>
         </div>
         <div className="flex gap-2">
+          {userRole === 'ADMIN' && (
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700 gap-2"
+              onClick={handleGenerateMonth}
+              disabled={generatingMonth}
+            >
+              {generatingMonth ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Générer le mois
+            </Button>
+          )}
           <Button variant="outline" className="gap-2">
             <Filter className="w-4 h-4" />
             Filtrer
@@ -350,13 +397,40 @@ export function SalaryManagement({ userRole }: SalaryManagementProps) {
                                 <Download className="w-4 h-4 mr-1" />
                                 Bulletin
                               </Button>
-                              {salary.statut === 'EN_ATTENTE' && (
+                              {salary.statut === 'EN_ATTENTE' && userRole !== 'ASSISTANT' && (
                                 <Button 
                                   size="sm" 
                                   className="bg-emerald-600 hover:bg-emerald-700"
                                   onClick={() => openPaymentDialog(salary)}
                                 >
                                   Payer
+                                </Button>
+                              )}
+                              {salary.statut === 'EN_ATTENTE' && userRole === 'ASSISTANT' && (
+                                <Button 
+                                  size="sm" 
+                                  className="bg-emerald-600 hover:bg-emerald-700"
+                                  onClick={() => openPaymentDialog(salary)}
+                                >
+                                  Payer
+                                </Button>
+                              )}
+                              {salary.statut === 'PAYE' && userRole === 'ADMIN' && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-red-600 border-red-200 hover:bg-red-50"
+                                  onClick={() => handleCancelPayment(salary)}
+                                  disabled={cancellingPayment === salary.id}
+                                >
+                                  {cancellingPayment === salary.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-4 h-4 mr-1" />
+                                      Annuler
+                                    </>
+                                  )}
                                 </Button>
                               )}
                             </div>

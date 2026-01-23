@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, AlertTriangle, ArrowDown, ArrowUp, Package as PackageIcon, Loader2, RefreshCw } from 'lucide-react';
+import { Search, AlertTriangle, ArrowDown, ArrowUp, Package as PackageIcon, Loader2, RefreshCw, Edit, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -45,6 +45,11 @@ export function StockManagement({ userRole }: StockManagementProps) {
     notes: ''
   });
 
+  // Category State
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [categoryFormData, setCategoryFormData] = useState({ nom: '', description: '' });
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+
   // Product Form Data
   const [productFormData, setProductFormData] = useState({
     nom: '',
@@ -56,9 +61,13 @@ export function StockManagement({ userRole }: StockManagementProps) {
     description: ''
   });
 
+  // Filter State
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+
+
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedMonth]);
 
   const loadData = async () => {
     try {
@@ -68,9 +77,13 @@ export function StockManagement({ userRole }: StockManagementProps) {
       const [productsData, categoriesData, movementsData] = await Promise.all([
         productService.getAll(),
         productService.getCategories(),
-        productService.getMovements({ limit: 20 }) // Fetch last 20 movements
+        productService.getMovements({ 
+          startDate: selectedMonth ? `${selectedMonth}-01` : undefined,
+          endDate: selectedMonth ? new Date(new Date(selectedMonth).getFullYear(), new Date(selectedMonth).getMonth() + 1, 0).toISOString().split('T')[0] : undefined,
+          limit: 100 
+        })
       ]);
-
+      
       setProducts(productsData);
       setCategories(categoriesData);
       setMovements(movementsData);
@@ -219,6 +232,61 @@ export function StockManagement({ userRole }: StockManagementProps) {
     }
   };
 
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+        setSubmitting(true);
+        if (editingCategory) {
+            await productService.updateCategory(editingCategory.id, categoryFormData);
+        } else {
+            await productService.createCategory(categoryFormData);
+        }
+        await loadData();
+        setCategoryFormData({ nom: '', description: '' });
+        setEditingCategory(null);
+        // Don't close dialog, just reset form to allow adding more or see list
+    } catch (err: any) {
+        console.error('Error saving category:', err);
+        alert(err.response?.data?.message || "Erreur lors de l'enregistrement de la catégorie");
+    } finally {
+        setSubmitting(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (confirm("Êtes-vous sûr de vouloir supprimer cette catégorie ?")) {
+        try {
+            await productService.deleteCategory(id);
+            await loadData();
+        } catch (err: any) {
+            alert(err.response?.data?.message || "Erreur lors de la suppression");
+        }
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+        setSubmitting(true);
+        const stats = await productService.importProducts(file);
+        alert(`Import terminé !\nTotal: ${stats.total}\nCréés: ${stats.created}\nMis à jour: ${stats.updated}\nErreurs: ${stats.errors.length}`);
+        if (stats.errors.length > 0) {
+            console.error('Import errors:', stats.errors);
+            alert('Certaines erreurs sont survenues, consultez la console pour les détails.');
+        }
+        await loadData();
+    } catch (err: any) {
+        console.error('Import error:', err);
+        alert(err.response?.data?.message || "Erreur lors de l'importation");
+    } finally {
+        setSubmitting(false);
+        // Reset input
+        e.target.value = '';
+    }
+  };
+
   const filteredProducts = products.filter(product =>
     product.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (product.code_produit || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -262,6 +330,71 @@ export function StockManagement({ userRole }: StockManagementProps) {
               <PackageIcon className="w-4 h-4" />
               Nouveau Produit
             </Button>
+
+            <div className="relative">
+                <input
+                    type="file"
+                    accept=".xlsx, .xls"
+                    onChange={handleImport}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={submitting}
+                />
+                <Button variant="outline" className="gap-2" disabled={submitting}>
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 text-blue-600" />}
+                    Import Excel
+                </Button>
+            </div>
+            
+            <Dialog open={isCategoryDialogOpen} onOpenChange={(open) => { setIsCategoryDialogOpen(open); if (!open) { setEditingCategory(null); setCategoryFormData({ nom: '', description: '' }); } }}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                   Gérer Catégories
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Gestion des Catégories</DialogTitle>
+                  <DialogDescription>Ajouter ou modifier des catégories de produits</DialogDescription>
+                </DialogHeader>
+                
+                <form onSubmit={handleCategorySubmit} className="space-y-4 border-b pb-4 mb-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="cat-nom">Nom de la catégorie</Label>
+                        <div className="flex gap-2">
+                            <Input 
+                                id="cat-nom" 
+                                value={categoryFormData.nom} 
+                                onChange={(e) => setCategoryFormData({...categoryFormData, nom: e.target.value})}
+                                placeholder="Ex: Détergents"
+                                required
+                            />
+                            <Button type="submit" disabled={submitting} size="sm" className="bg-emerald-600">
+                                {editingCategory ? 'Modifier' : 'Ajouter'}
+                            </Button>
+                        </div>
+                    </div>
+                </form>
+
+                <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-gray-500">Catégories existantes</h4>
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                        {categories.map(cat => (
+                            <div key={cat.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
+                                <span>{cat.nom} ({cat.productCount || 0})</span>
+                                <div className="flex gap-1">
+                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setEditingCategory(cat); setCategoryFormData({ nom: cat.nom, description: cat.description || '' }); }}>
+                                        <Edit className="w-3 h-3" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500" onClick={() => handleDeleteCategory(cat.id)}>
+                                        <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Dialog open={isProductDialogOpen} onOpenChange={(open) => { setIsProductDialogOpen(open); if (!open) resetProductForm(); }}>
               <DialogContent>
@@ -644,6 +777,18 @@ export function StockManagement({ userRole }: StockManagementProps) {
               <CardDescription>Entrées et sorties de stock</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex justify-end mb-4">
+                 <div className="flex items-center gap-2">
+                    <Label htmlFor="month-filter">Filtrer par mois :</Label>
+                    <Input 
+                        id="month-filter"
+                        type="month" 
+                        value={selectedMonth} 
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="w-40"
+                    />
+                 </div>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>

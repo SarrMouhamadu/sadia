@@ -286,6 +286,156 @@ const getWorkerStats = asyncHandler(async (req, res) => {
     });
 });
 
+const xlsx = require('xlsx');
+
+// ... existing code ...
+
+/**
+ * @desc    Import workers from Excel/CSV
+ * @route   POST /api/workers/import
+ * @access  Admin
+ */
+const importWorkers = asyncHandler(async (req, res) => {
+    if (!req.file) {
+        throw ApiError.badRequest('Aucun fichier téléchargé');
+    }
+
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+
+    let currentSite = 'SALIHATE CLEAN SERVICES'; // Default site
+    let successCount = 0;
+    let errors = [];
+    
+    // Column Mapping Indices (based on visual inspection, dynamics can be added later)
+    // Looking for headers to adjust indices
+    let colMap = {
+        prenom: 1,
+        nom: 2,
+        ni: 3,
+        tel: 4,
+        adresse: 5,
+        salaire: 6,
+        naissance: 7
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        // Skip empty rows (filtering just in case)
+        const rowContent = row.filter(c => c !== null && c !== undefined && c !== '').length;
+        if (rowContent === 0) continue;
+
+        // Detect Header Row
+        const rowStr = JSON.stringify(row).toUpperCase();
+        if (rowStr.includes('PRENOMS') && rowStr.includes('NOMS')) {
+            // Update indices if needed based on this row
+            row.forEach((cell, index) => {
+                const val = String(cell).toUpperCase().trim();
+                if (val.includes('PRENOM')) colMap.prenom = index;
+                if (val.includes('NOM') && !val.includes('PRENOM')) colMap.nom = index;
+                if (val.includes('N.I') || val.includes('CNI')) colMap.ni = index;
+                if (val.includes('TELEPHONE')) colMap.tel = index;
+                if (val.includes('ADRESSE')) colMap.adresse = index;
+                if (val.includes('SALAIRE')) colMap.salaire = index;
+                if (val.includes('ON')) colMap.naissance = index; // DATE DE NAISSANCE
+            });
+            continue; // Skip header row
+        }
+
+        // Detect Site Row (Approximation: Row with text but not matching name data)
+        // If it's a "Site" row, it usually has very few columns filled, often just the first or merged
+        if (rowContent <= 2 && !rowStr.includes('PRENOMS') && !rowStr.includes('NOMS')) {
+            // Potential site name
+            // Filter out purely numeric rows or empty strings
+            const potentialName = row.find(c => typeof c === 'string' && c.trim().length > 2);
+            if (potentialName) {
+                // If the name is excluded keywords, ignore
+                if (!['PRENOMS', 'NOMS', 'SALAIRES'].includes(potentialName.toUpperCase())) {
+                    currentSite = potentialName.trim();
+                    // Clean up specific prefix if present
+                    if (currentSite.toUpperCase().includes('LES TECHNICIENS DE SURFACE DE')) {
+                        currentSite = currentSite.replace(/LES TECHNICIENS DE SURFACE DE/i, '').trim();
+                    }
+                    continue;
+                }
+            }
+        }
+
+        // Process Worker Data
+        try {
+            const nom = row[colMap.nom];
+            const prenom = row[colMap.prenom];
+
+            if (!nom || !prenom) continue; // Not a valid worker row
+
+            const cin = row[colMap.ni] ? String(row[colMap.ni]).trim() : null;
+            const contact = row[colMap.tel] ? String(row[colMap.tel]).trim() : null;
+            const adresse = row[colMap.adresse] ? String(row[colMap.adresse]).trim() : null;
+            const salaire_base = row[colMap.salaire] ? parseFloat(String(row[colMap.salaire]).replace(/\s/g, '').replace(',', '.')) : 0;
+            
+            // Date parsing
+            let date_naissance = null;
+            if (row[colMap.naissance]) {
+                // Handle different date formats (Excel number or string)
+                if (typeof row[colMap.naissance] === 'number') {
+                    // Excel date serial number
+                    date_naissance = new Date(Math.round((row[colMap.naissance] - 25569) * 86400 * 1000));
+                } else {
+                    // Try parsing DD/MM/YYYY
+                    const parts = String(row[colMap.naissance]).split('/');
+                    if (parts.length === 3) {
+                        date_naissance = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                    } else {
+                         date_naissance = new Date(row[colMap.naissance]);
+                    }
+                }
+            }
+
+            // Create or Update Worker
+            // Strategy: Try to find by CIN if exists, else by Nom+Prenom
+            let worker = null;
+            if (cin) {
+                worker = await Worker.findOne({ where: { cin } });
+            }
+            if (!worker) {
+                worker = await Worker.findOne({ where: { nom: String(nom).trim(), prenom: String(prenom).trim() } });
+            }
+
+            const workerData = {
+                nom: String(nom).trim(),
+                prenom: String(prenom).trim(),
+                cin: cin,
+                contact: contact,
+                adresse: adresse,
+                salaire_base: isNaN(salaire_base) ? 0 : salaire_base,
+                site_affectation: currentSite,
+                date_naissance: date_naissance,
+                date_embauche: new Date(), // As requested: current date
+                poste: 'Technicien de surface', // Default if not specified
+                statut: 'ACTIF',
+                created_by: req.user.id
+            };
+
+            if (worker) {
+                await worker.update(workerData);
+            } else {
+                await Worker.create(workerData);
+            }
+            successCount++;
+
+        } catch (err) {
+            console.error('Error processing row:', row, err);
+            errors.push(`Erreur ligne ${i + 1}: ${err.message}`);
+        }
+    }
+
+    ApiResponse.success(res, { count: successCount, errors }, `${successCount} travailleurs importés/mis à jour.`);
+});
+
 module.exports = {
     createWorker,
     getWorkers,
@@ -293,5 +443,6 @@ module.exports = {
     updateWorker,
     updateWorkerStatus,
     deleteWorker,
-    getWorkerStats
+    getWorkerStats,
+    importWorkers
 };

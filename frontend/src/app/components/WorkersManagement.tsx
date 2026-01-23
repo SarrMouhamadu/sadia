@@ -29,6 +29,19 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
 
+  const [formData, setFormData] = useState<Partial<Worker>>({
+    nom: '',
+    prenom: '',
+    poste: '',
+    contact: '',
+    email: '',
+    date_embauche: '',
+    salaire_base: 0,
+    statut: 'ACTIF',
+    site_affectation: '',
+    cin: ''
+  });
+
   const loadWorkers = async () => {
     try {
       const params: any = {
@@ -51,6 +64,21 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
   useEffect(() => {
     loadWorkers();
   }, [selectedMonth, selectedYear, paymentFilter]);
+
+  const resetForm = () => {
+    setFormData({
+      nom: '',
+      prenom: '',
+      poste: '',
+      contact: '',
+      email: '',
+      date_embauche: '',
+      salaire_base: 0,
+      statut: 'ACTIF',
+      site_affectation: '',
+      cin: ''
+    });
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,34 +163,6 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
     }
   };
 
-  const [formData, setFormData] = useState<Partial<Worker>>({
-    nom: '',
-    prenom: '',
-    poste: '',
-    contact: '',
-    email: '',
-    date_embauche: '',
-    salaire_base: 0,
-    statut: 'ACTIF',
-    site_affectation: '',
-    cin: ''
-  });
-
-  const resetForm = () => {
-    setFormData({
-      nom: '',
-      prenom: '',
-      poste: '',
-      contact: '',
-      email: '',
-      date_embauche: '',
-      salaire_base: 0,
-      statut: 'ACTIF',
-      site_affectation: '',
-      cin: ''
-    });
-  };
-
   const onOpenChange = (open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
@@ -177,7 +177,7 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row gap-6 text-center md:text-left">
         <div>
           <h1 className="text-3xl text-gray-900 mb-2">Gestion des travailleurs</h1>
           <p className="text-gray-600">Gérez votre équipe et leurs informations</p>
@@ -324,6 +324,50 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
             </DialogContent>
           </Dialog>
         )}
+        {canEdit && (
+          <>
+            <input
+              type="file"
+              accept=".xlsx, .xls"
+              id="excel-upload"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                if (confirm(`Voulez-vous importer les travailleurs depuis le fichier "${file.name}" ?`)) {
+                  setLoading(true);
+                  try {
+                    const res = await workerService.importFromExcel(file);
+                    if (res.success || res) {
+                       // Fix: accommodate backend response format differences
+                      const data = res.data || res;
+                      alert(`Import réussi !\nTotal: ${data.total}\nCréés: ${data.created}\nMis à jour: ${data.updated}\n${data.errors && data.errors.length > 0 ? '\nErreurs:\n' + data.errors.join('\n') : ''}`);
+                      loadWorkers();
+                    }
+                  } catch (err: any) {
+                    alert('Erreur lors de l\'import: ' + (err.message || 'Erreur inconnue'));
+                  } finally {
+                    setLoading(false);
+                    // Reset input
+                    e.target.value = '';
+                  }
+                } else {
+                  e.target.value = '';
+                }
+              }}
+            />
+            <Button 
+              variant="outline" 
+              className="ml-2 border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+              onClick={() => document.getElementById('excel-upload')?.click()}
+              disabled={loading}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Importer Excel
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4 items-end bg-white p-4 rounded-lg border shadow-sm">
@@ -415,6 +459,7 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
               <TableRow>
                 <TableHead>Nom</TableHead>
                 <TableHead>Poste</TableHead>
+                <TableHead>NIN (CIN)</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Date d'embauche</TableHead>
                 <TableHead>Salaire</TableHead>
@@ -426,7 +471,7 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
             <TableBody>
               {filteredWorkers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                     Aucun travailleur trouvé pour ces critères.
                   </TableCell>
                 </TableRow>
@@ -442,10 +487,11 @@ export function WorkersManagement({ userRole }: WorkersManagementProps) {
                         )}
                       </TableCell>
                       <TableCell>{worker.poste}</TableCell>
+                      <TableCell>{worker.cin || 'N/A'}</TableCell>
                       <TableCell>
                         <div className="text-sm">
                           <div>{worker.contact || 'N/A'}</div>
-                          <div className="text-gray-500">{worker.email || 'N/A'}</div>
+                          {worker.email && <div className="text-gray-500">{worker.email}</div>}
                         </div>
                       </TableCell>
                       <TableCell>{new Date(worker.date_embauche).toLocaleDateString('fr-FR')}</TableCell>

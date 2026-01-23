@@ -49,13 +49,37 @@ export const productService = {
   getCategories: async (): Promise<Category[]> => {
     const response = await api.get('/categories');
     // Backend uses ApiResponse.success() which returns: { success, message, data: { categories: [...] } }
+    // Backend uses ApiResponse.success() which returns: { success, message, data: { categories: [...] } }
     return response.data?.data?.categories || [];
+  },
+
+  createCategory: async (data: Partial<Category>): Promise<Category> => {
+    const response = await api.post('/categories', data);
+    return response.data.data.category;
+  },
+
+  updateCategory: async (id: string, data: Partial<Category>): Promise<Category> => {
+    const response = await api.put(`/categories/${id}`, data);
+    return response.data.data.category;
+  },
+
+  deleteCategory: async (id: string): Promise<void> => {
+    await api.delete(`/categories/${id}`);
   },
 
   // Stock Management
   recordEntry: async (data: { product_id: string; quantite: number; source?: string; reference?: string; notes?: string }) => {
     const response = await api.post('/stock/entry', data);
     return response.data.data;
+  },
+
+  importProducts: async (file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/products/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data.data; // import controller returns stats in data
   },
 
   recordExit: async (data: { product_id: string; quantite: number; destination?: string; reference?: string; notes?: string }) => {

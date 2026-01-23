@@ -23,6 +23,7 @@ export interface Worker {
     contact?: string;
     email?: string;
     date_embauche: string;
+    date_naissance?: string;
     salaire_base: number;
     statut: 'ACTIF' | 'INACTIF' | 'SUSPENDU';
     site_affectation?: string;

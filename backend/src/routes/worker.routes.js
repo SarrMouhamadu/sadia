@@ -1,6 +1,8 @@
 const express = require('express');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 const router = express.Router();
-const { workerController } = require('../controllers');
+const { workerController, importController } = require('../controllers');
 const { authMiddleware, staffOnly, adminOnly, validate } = require('../middlewares');
 const {
     createWorkerValidator,
@@ -110,6 +112,27 @@ const {
  *         description: Not authenticated
  */
 router.post('/', authMiddleware, staffOnly, createWorkerValidator, validate, workerController.createWorker);
+
+/**
+ * @swagger
+ * /api/workers/import:
+ *   post:
+ *     summary: Import workers from Excel file
+ *     tags: [Workers]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Import successful
+ */
+router.post('/import', authMiddleware, staffOnly, upload.single('file'), importController.importWorkers);
 
 /**
  * @swagger

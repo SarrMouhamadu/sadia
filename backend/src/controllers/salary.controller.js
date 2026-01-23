@@ -168,6 +168,37 @@ const paySalary = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Cancel salary payment
+ * @route   PATCH /api/salaries/:id/cancel-payment
+ * @access  Admin
+ */
+const cancelPayment = asyncHandler(async (req, res) => {
+    const salary = await Salary.findByPk(req.params.id, {
+        include: [{ model: Worker, as: 'worker' }]
+    });
+
+    if (!salary) {
+        throw ApiError.notFound('Salaire non trouvé');
+    }
+
+    if (salary.statut !== 'PAYE') {
+        throw ApiError.badRequest('Seul un salaire payé peut être annulé');
+    }
+
+    salary.statut = 'EN_ATTENTE';
+    salary.date_paiement = null;
+    salary.mode_paiement = null;
+    salary.reference_paiement = null;
+
+    await salary.save();
+
+    const workerName = salary.worker ? `${salary.worker.nom} ${salary.worker.prenom}` : 'N/A';
+    logger.info(`Payment cancelled: ${workerName} - ${salary.mois}/${salary.annee} by ${req.user.email}`);
+
+    ApiResponse.success(res, { salary }, 'Paiement annulé avec succès');
+});
+
+/**
  * @desc    Get salary statistics for a month
  * @route   GET /api/salaries/stats
  * @access  Admin, Assistant
@@ -385,5 +416,6 @@ module.exports = {
     getWorkerSalaries,
     generateBulletin,
     generateMonthSalaries,
-    generateBulletinForWorker
+    generateBulletinForWorker,
+    cancelPayment
 };

@@ -89,6 +89,14 @@ export const salaryService = {
   },
 
   /**
+   * Cancel a salary payment
+   */
+  cancelPayment: async (id: string): Promise<Salary> => {
+    const response = await api.patch(`/salaries/${id}/cancel-payment`);
+    return response.data.data.salary;
+  },
+
+  /**
    * Generate salary bulletin PDF for an existing salary
    */
   generateBulletin: async (id: string): Promise<Blob> => {

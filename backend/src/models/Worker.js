@@ -60,6 +60,13 @@ const Worker = sequelize.define('Worker', {
             }
         }
     },
+    date_naissance: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        validate: {
+            isDate: { msg: 'Date de naissance invalide' }
+        }
+    },
     salaire_base: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { stockController } = require('../controllers');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+const { stockController, importController } = require('../controllers');
 const { authMiddleware, staffOnly, adminOnly, validate } = require('../middlewares');
 const {
     createCategoryValidator,
@@ -231,6 +233,28 @@ router.delete('/categories/:id', authMiddleware, adminOnly, categoryIdValidator,
  *         description: Product created
  */
 router.post('/products', authMiddleware, staffOnly, createProductValidator, validate, stockController.createProduct);
+
+/**
+ * @swagger
+ * /api/products/import:
+ *   post:
+ *     summary: Import products from Excel file
+ *     tags: [Products]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Import successful
+ */
+router.post('/products/import', authMiddleware, staffOnly, upload.single('file'), importController.importProducts);
+
 
 /**
  * @swagger
